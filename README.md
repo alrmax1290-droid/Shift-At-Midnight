@@ -27,4 +27,4 @@ this is my first port in like 5 months more coming soon ok bye
 ```bash
 python -m http.server 8000
 ```
-Once done you'll have Untitled Goose Game self hosted!
+Once done you'll have Shift At Midnight self hosted!
