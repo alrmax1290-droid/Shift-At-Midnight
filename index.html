@@ -65,7 +65,6 @@ html, body {
 <!-- 🔥 GLOBAL AUDIO PATCH -->
 <script>
 (function() {
-	// Patch AudioParam.value to block NaN / Infinity
 	const descriptor = Object.getOwnPropertyDescriptor(AudioParam.prototype, "value");
 	if (descriptor && descriptor.set) {
 		Object.defineProperty(AudioParam.prototype, "value", {
@@ -80,7 +79,6 @@ html, body {
 		});
 	}
 
-	// Patch channel.setPosition globally to replace invalid positions with 0
 	const oldAppend = document.body.appendChild;
 	document.body.appendChild = function(el) {
 		if (el.tagName === "SCRIPT" && el.src.includes("loader.js")) {
@@ -103,37 +101,32 @@ html, body {
 </script>
 
 <script>
-// File merging functions
+// File merging
 function mergeFiles(fileParts) {
 	return new Promise((resolve, reject) => {
 		let buffers = [];
-
-		function fetchPart(index) {
-			if (index >= fileParts.length) {
+		function fetchPart(i) {
+			if (i >= fileParts.length) {
 				resolve(URL.createObjectURL(new Blob(buffers)));
 				return;
 			}
-
-			fetch(fileParts[index])
-				.then(response => response.arrayBuffer())
+			fetch(fileParts[i])
+				.then(res => res.arrayBuffer())
 				.then(data => {
 					buffers.push(data);
 					document.getElementById("loading-text").textContent =
-						`Downloading (${index + 1}/${fileParts.length})`;
-					fetchPart(index + 1);
+						`Downloading (${i+1}/${fileParts.length})`;
+					fetchPart(i+1);
 				})
 				.catch(reject);
 		}
-
 		fetchPart(0);
 	});
 }
 
 function getParts(file, start, end) {
 	let parts = [];
-	for (let i = start; i <= end; i++) {
-		parts.push(file + ".part" + i);
-	}
+	for (let i=start; i<=end; i++) parts.push(file+".part"+i);
 	return parts;
 }
 
@@ -143,14 +136,14 @@ document.getElementById("start-button").addEventListener("click", function() {
 	document.getElementById("loading-text").textContent = "Loading...";
 
 	Promise.all([
-		mergeFiles(getParts("Build/ShiftAtMidnightPort.data", 1, 5)),
-		mergeFiles(getParts("Build/ShiftAtMidnightPort.wasm", 1, 2))
+		mergeFiles(getParts("Build/ShiftAtMidnightPort.data",1,5)),
+		mergeFiles(getParts("Build/ShiftAtMidnightPort.wasm",1,2))
 	]).then(([dataUrl, wasmUrl]) => {
 
 		const buildUrl = "Build";
 		const config = {
 			dataUrl: dataUrl,
-			frameworkUrl: buildUrl + "/ShiftAtMidnightPort.framework.js",
+			frameworkUrl: buildUrl+"/ShiftAtMidnightPort.framework.js",
 			codeUrl: wasmUrl,
 			streamingAssetsUrl: "StreamingAssets",
 			companyName: "slqntdevss",
@@ -159,16 +152,15 @@ document.getElementById("start-button").addEventListener("click", function() {
 		};
 
 		const loaderScript = document.createElement("script");
-		loaderScript.src = buildUrl + "/ShiftAtMidnightPort.loader.js";
+		loaderScript.src = buildUrl+"/ShiftAtMidnightPort.loader.js";
 
 		loaderScript.onload = () => {
-			// Create Unity instance
 			createUnityInstance(
 				document.getElementById("unity-canvas"),
 				config,
 				(progress) => {
 					document.getElementById("loading-text").textContent =
-						"Loading... " + Math.round(progress * 100) + "%";
+						"Loading... "+Math.round(progress*100)+"%";
 				}
 			).then((unityInstance) => {
 				document.getElementById("loading-text").remove();
@@ -177,7 +169,6 @@ document.getElementById("start-button").addEventListener("click", function() {
 				(function() {
 					function patchAllVending(unityInstance) {
 						if (!unityInstance || !unityInstance.Module) return;
-
 						const originalClick = unityInstance.Module?.onVendingClick;
 						unityInstance.Module.onVendingClick = function(machineID) {
 							if (unityInstance.Module.playerInventory) {
@@ -187,15 +178,29 @@ document.getElementById("start-button").addEventListener("click", function() {
 							if (originalClick) originalClick(machineID);
 						};
 					}
-
-					// Keep patching until Unity loads
-					const interval = setInterval(() => {
-						patchAllVending(unityInstance);
-					}, 100);
+					setInterval(()=>patchAllVending(unityInstance),100);
 				})();
-			}).catch((message) => {
-				alert(message);
-			});
+
+				// 🔹 COBRA COLA INVENTORY PATCH
+				(function() {
+					function patchInventory(unityInstance) {
+						if (!unityInstance || !unityInstance.Module) return;
+						const originalAddItem = unityInstance.Module?.addItemToInventory;
+						if (!originalAddItem) return;
+						unityInstance.Module.addItemToInventory = function(item) {
+							if (item && item.name && item.name.toLowerCase().includes("cobra")) {
+								if (unityInstance.Module.playerInventory) {
+									unityInstance.Module.playerInventory.hasBoughtDrink = true;
+									console.log("Cobra Cola marked as bought!");
+								}
+							}
+							return originalAddItem.call(this,item);
+						};
+					}
+					setInterval(()=>patchInventory(unityInstance),100);
+				})();
+				
+			}).catch(msg=>alert(msg));
 		};
 
 		document.body.appendChild(loaderScript);
